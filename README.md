@@ -4,5 +4,5 @@
 
 # Props:
 * Ashe`s bow from League of Legends - ItsyBitsy M0
-* Egg from Ready Player One - Gemma M0, Trinket M0
+* James Halliday`s egg from Ready Player One - Gemma M0, Trinket M0
 * Thermal Detonator from Star Wars - Sparkfun ATTiny85

@@ -28,7 +28,7 @@ Adafruit_NeoPixel strip(STRIP_LENGTH, NEOPIXEL_DATA, NEO_GRB + NEO_KHZ800);
 auto timer = timer_create_default();
 
 const byte stripTopColumnStart = 216;
-const byte pixelRGBColor[] = {174, 109, 30};
+const byte pixelRGBColor[3] = {174, 109, 30}; // pro SK6812, {189, 120, 34} pro WS2812
 const byte pixelSpeedHigh[2] = {100, 90};
 const byte pixelSpeedMedium[2] = {70, 50};
 const byte pixelSpeedLow[2] = {50, 44};
@@ -36,13 +36,12 @@ const byte pixelSpeedDelayInit = 2; // timeout po touch eventu [s]
 const byte pixelSpeedDelayStep = 10; // timeout mezi kroky [s]
 const byte pixelsMinMax[2] = {25, 36}; // pocet pixelu najednou (min a max interval)
 const byte pixelsMinMaxReduced[2] = {5, 20}; // pocet pixelu najednou pro mode 2 (min a max interval)
-const byte stripCurrentModeTimer[2] = {70, 255}; // [s] interval pro random mode timer
 const byte stripPixelsFlash[15] = {0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10}; // pocet pixelu na zablesk
-const byte stripPixelsFlashLength = 15;
+const byte stripPixelsFlashLength = 15; // pocet prvku v stripPixelsFlash[]
+const byte flashColors[3][3] = {{255, 162, 46}, {128, 81, 23}, {85, 54, 15}}; // zableskove barvy
 const byte flashTimesMinMax[2] = {1, 7}; // kolikrat se ma bliknout
-const byte stripPixelsFlashStartIndex = 5; // index alespon 1x zablesk
-const byte stripFlashTimer[2] = {15, 60}; // [s] interval pro random flash timer
-const byte pixelWaitCycles = 15; // prodleva pixelu na mbr pro mode 1 a 2 [pocet cyklu]
+const byte stripPixelsFlashStartIndex = 5; // start index alespon 1x zablesk z pole stripPixelsFlash[]
+const byte pixelWaitCycles = 15; // prodleva pixelu na mbr pro pixel mode 1 a 2 [pocet cyklu]
 
 typedef struct EggPixel
 {
@@ -59,14 +58,11 @@ typedef struct EggPixel
 
 EggPixel pixels[PIXELS_CNT];
 word buttonTouchCoef = 0;
-word stripCurrentModeTimerSet = 30;
 bool pixelSpeedTrigger = false;
-bool pixelRGBColorChange = false;
 bool timer1Trigger = true;
 byte pixelsCntActive = 0;
 byte stripFlash = 0;
 byte stripFlashTotal = 0;
-byte stripFlashTimerSet = 30;
 word stripFreePositions[STRIP_LENGTH];
 byte pixelSpeedIndex = 0;
 unsigned long pixelSpeedTimer = 0;
@@ -75,6 +71,7 @@ byte pixelDifferentBrightness = 0;
 byte pixelsCntCurrent = 0;
 byte pixelDifferentBrightnesses = 0;
 byte pixelCurrentSpeed[2];
+byte flashColorsCoef = 0;
 
 void turnOnboardLEDOn()
 {
@@ -120,75 +117,68 @@ void setPixelCurrentSpeed(const byte pixelSpeed[])
 
 void pixelProcess(EggPixel &eggPixel)
 {
-  if (eggPixel.timer > 0) {
+  if ((eggPixel.flashTimes > 0) && ((eggPixel.currentBrightness == eggPixel.maxBrightness) || (eggPixel.status == 2))) {
 
-    if (eggPixel.timer > pixelWaitCycles) {
-      eggPixel.status = 2;
-      eggPixel.timer = 0;
+    if (pixelCurrentMode == 3) {
+
+      strip.setPixelColor(
+        eggPixel.position,
+        strip.Color(
+          eggPixel.rgb[0],
+          eggPixel.rgb[1],
+          eggPixel.rgb[2]
+        )
+      );
+
     } else {
-      eggPixel.timer++;
+      
+      flashColorsCoef = random(0, 3);
+
+      strip.setPixelColor(
+        eggPixel.position,
+        strip.Color(flashColors[flashColorsCoef][0], flashColors[flashColorsCoef][1], flashColors[flashColorsCoef][2])
+      );
     }
-  }
+    
+    eggPixel.flashTimes--;
+  
+  }else{
 
-  if (eggPixel.status == 1) {
-    eggPixel.currentBrightness += eggPixel.stepChangeBrightness;
-    if (eggPixel.currentBrightness > eggPixel.maxBrightness) {
-      eggPixel.currentBrightness = eggPixel.maxBrightness;
-    }
-    if (eggPixel.currentBrightness == eggPixel.maxBrightness) {
-      eggPixel.timer = 1;
-      eggPixel.status = 3;
-    }
-  } else {
-    eggPixel.currentBrightness -= eggPixel.stepChangeBrightness;
-    if (eggPixel.currentBrightness < 0) {
-      eggPixel.currentBrightness = 0;
-    }
-  }
+    if (eggPixel.timer > 0) {
 
-  if (eggPixel.flashTimes > 0) {
-
-    if ((eggPixel.currentBrightness == eggPixel.maxBrightness) || (eggPixel.status == 2)) {
-
-      if (pixelCurrentMode == 3) {
-
-        strip.setPixelColor(
-          eggPixel.position,
-          strip.Color(
-            eggPixel.rgb[0],
-            eggPixel.rgb[1],
-            eggPixel.rgb[2]
-          )
-        );
-
+      if (eggPixel.timer > pixelWaitCycles) {
+        eggPixel.status = 2;
+        eggPixel.timer = 0;
       } else {
-
-        byte flashColors[3];
-        byte flashColorsCoef = random(1, 4);
-
-        flashColors[0] = round(255 / flashColorsCoef);
-        flashColors[1] = round(162 / flashColorsCoef);
-        flashColors[2] = round(46 / flashColorsCoef);
-
-        strip.setPixelColor(
-          eggPixel.position,
-          strip.Color(flashColors[0], flashColors[1], flashColors[2])
-        );
+        eggPixel.timer++;
       }
-      strip.show();
-
-      eggPixel.flashTimes--;
     }
-  }
 
-  strip.setPixelColor(
-    eggPixel.position,
-    strip.Color(
-      eggPixel.rgb[0] * eggPixel.currentBrightness / 255,
-      eggPixel.rgb[1] * eggPixel.currentBrightness / 255,
-      eggPixel.rgb[2] * eggPixel.currentBrightness / 255
-    )
-  );
+    if (eggPixel.status == 1) {
+      eggPixel.currentBrightness += eggPixel.stepChangeBrightness;
+      if (eggPixel.currentBrightness > eggPixel.maxBrightness) {
+        eggPixel.currentBrightness = eggPixel.maxBrightness;
+      }
+      if (eggPixel.currentBrightness == eggPixel.maxBrightness) {
+        eggPixel.timer = 1;
+        eggPixel.status = 3;
+      }
+    } else {
+      eggPixel.currentBrightness -= eggPixel.stepChangeBrightness;
+      if (eggPixel.currentBrightness < 0) {
+        eggPixel.currentBrightness = 0;
+      }
+    }
+
+    strip.setPixelColor(
+      eggPixel.position,
+      strip.Color(
+        eggPixel.rgb[0] * eggPixel.currentBrightness / 255,
+        eggPixel.rgb[1] * eggPixel.currentBrightness / 255,
+        eggPixel.rgb[2] * eggPixel.currentBrightness / 255
+      )
+    );
+  }
 
   if ((eggPixel.currentBrightness == 0) && (eggPixel.status == 2)) {
 
@@ -254,13 +244,10 @@ void pixelCreate(EggPixel &eggPixel)
     }
     eggPixel.stepChangeBrightness = rnd;
 
-    if (pixelRGBColorChange) {
-
+    if (pixelCurrentMode == 3) {
       eggPixel.rgb[0] = random(0, 256);
       eggPixel.rgb[1] = random(0, 256);
       eggPixel.rgb[2] = random(0, 256);
-
-      pixelRGBColorChange = false;
     }
 
     if (eggPixel.maxBrightness > 255) {
@@ -273,14 +260,6 @@ void pixelCreate(EggPixel &eggPixel)
   }
 }
 
-bool eventTimer3(void *)
-{
-  if (pixelCurrentMode == 3 && !pixelRGBColorChange) {
-    pixelRGBColorChange = true;
-  }
-  return true;
-}
-
 bool eventTimer2(void *)
 {
   if (pixelSpeedIndex == 0) {
@@ -288,7 +267,6 @@ bool eventTimer2(void *)
     adjustValByRandomOrStep(&pixelsCntCurrent);
 
     pixelDifferentBrightnesses = round(pixelsCntCurrent / 5);
-    stripCurrentModeTimerSet = random(stripCurrentModeTimer[0], stripCurrentModeTimer[1]);
   }
   return true;
 }
@@ -297,7 +275,6 @@ bool eventTimer1(void *)
 {
   if (timer1Trigger && stripFlash == 0 && pixelCurrentMode > 0) {
     stripFlashTotal = stripPixelsFlash[random(0, stripPixelsFlashLength)];
-    stripFlashTimerSet = random(stripFlashTimer[0], stripFlashTimer[1]);
   }
   return true;
 }
@@ -345,9 +322,8 @@ void setup()
   buttonTouch.begin();
 
   // timers
-  timer.every(15 * 1000, eventTimer3);
-  timer.every(stripCurrentModeTimerSet * 1000, eventTimer2);
-  timer.every(stripFlashTimerSet * 1000, eventTimer1);
+  timer.every(50 * 1000, eventTimer2);
+  timer.every(30 * 1000, eventTimer1);
 
   // onboard DotStar pixel
   onboardDotstarLedColors[0].red = 0;

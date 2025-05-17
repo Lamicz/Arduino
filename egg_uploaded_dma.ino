@@ -26,13 +26,13 @@ PinButton buttonSwitch(BUTTON_SWITCH);
 APA102<DOTSTAR_DATA, DOTSTAR_CLK> onboardDotStarLed;
 rgb_color onboardDotstarLedColors[1];
 
-Adafruit_NeoPixel_ZeroDMA strip(STRIP_LENGTH, NEOPIXEL_DATA, NEO_GRB);
+Adafruit_NeoPixel_ZeroDMA strip(STRIP_LENGTH, NEOPIXEL_DATA, NEO_GRB + NEO_KHZ800);
 
 const byte stripTopColumnStart = 216;
 const byte pixelRGBColor[3] = {174, 109, 30}; // pro SK6812, {189, 120, 34} pro WS2812
-const word pixelSpeedHigh[2] = {750, 670}; // standard rychlost
-const word pixelSpeedMedium[2] = {630, 450}; // rychlejsi
-const word pixelSpeedLow[2] = {450, 396}; // nejrychlejsi
+const byte pixelSpeedHigh[2] = {35, 31}; // standard rychlost
+const byte pixelSpeedMedium[2] = {25, 18}; // rychlejsi
+const byte pixelSpeedLow[2] = {18, 15}; // nejrychlejsi
 const byte pixelSpeedDelayInit = 4; // timeout po touch eventu [s]
 const byte pixelSpeedDelayStep = 10; // timeout mezi kroky [s]
 const byte pixelsMinMax[2] = {30, 45}; // pocet pixelu najednou (min a max interval)
@@ -42,12 +42,12 @@ const byte stripPixelsFlashLength = 15; // pocet prvku v stripPixelsFlash[]
 const byte stripPixelsFlashStartIndex = 5; // start index alespon 1x zablesk z pole stripPixelsFlash[]
 const byte flashColors[3][3] = {{255, 162, 46}, {128, 81, 23}, {85, 54, 15}}; // zableskove barvy
 const byte flashTimesMinMax[2] = {1, 7}; // kolikrat se ma bliknout
-const byte pixelWaitCycles = 30; // prodleva pixelu na mbr pro pixel mode 1 a 2 [pocet cyklu]
+const byte pixelWaitCycles = 52; // prodleva pixelu na mbr pro pixel mode 1 a 2 [pocet cyklu]
+const byte pixelsMaxBrightnessMinMax[2] = {2, 20}; // pomer poctu pixelu co sviti vic
 
 typedef struct Timer
 {
   unsigned long tick = 0;
-  unsigned long pixelSubmode = 0;
   unsigned long pixelCnt = 0;
   unsigned long pixelFlash = 0;
   bool pixelFlashEnabled = true;
@@ -83,9 +83,10 @@ byte pixelSpeedDelay = 0;
 byte pixelDifferentBrightness = 0;
 byte pixelsCntCurrent = 0;
 byte pixelDifferentBrightnesses = 0;
-word pixelCurrentSpeed[2];
+byte pixelCurrentSpeed[2];
 byte flashColorsCoef = 0;
-float speedCoef;
+byte speedCoef;
+word rndPos;
 
 void adjustPixelsCntByStep(byte *varToAdjust)
 {
@@ -113,7 +114,7 @@ void adjustPixelsCntByStep(byte *varToAdjust)
   }
 }
 
-void setPixelCurrentSpeed(const word pixelSpeed[])
+void setPixelCurrentSpeed(const byte pixelSpeed[])
 {
   pixelCurrentSpeed[0] = pixelSpeed[0];
   pixelCurrentSpeed[1] = pixelSpeed[1];
@@ -216,13 +217,10 @@ void pixelCreate(EggPixel &eggPixel)
 
     pixelsCntActive++;
 
-    bool isPosFree = false;
-    word rndPos;
     do {
       rndPos = random(STRIP_LENGTH);
-      isPosFree = stripFreePositions[rndPos];
-    } while (!isPosFree);
-    
+    } while (!stripFreePositions[rndPos]);
+
     eggPixel.position = rndPos;
     stripFreePositions[eggPixel.position] = false;
 
@@ -252,11 +250,8 @@ void pixelCreate(EggPixel &eggPixel)
       eggPixel.maxBrightness += 40;
     }
 
-    speedCoef = random(pixelCurrentSpeed[1], pixelCurrentSpeed[0] + 1) + 0.0;
-    eggPixel.stepChangeBrightness = eggPixel.maxBrightness / speedCoef;
-    if(eggPixel.stepChangeBrightness <= 0.03){
-      eggPixel.stepChangeBrightness = 0.03;
-    }
+    speedCoef = random(pixelCurrentSpeed[1], pixelCurrentSpeed[0] + 1);
+    eggPixel.stepChangeBrightness = round(eggPixel.maxBrightness / speedCoef) / 10.0;
 
     if (pixelCurrentMode == 3) {
       eggPixel.rgb[0] = random(0, 256);
@@ -281,7 +276,7 @@ void stripReset(EggPixel pixels[])
   setPixelCurrentSpeed(pixelSpeedHigh);
   adjustPixelsCntByStep(&pixelsCntCurrent);
 
-  pixelDifferentBrightnesses = round(pixelsCntCurrent / 4);
+  pixelDifferentBrightnesses = round(pixelsCntCurrent / random(pixelsMaxBrightnessMinMax[0], pixelsMaxBrightnessMinMax[1] + 1));
 
   pixelDifferentBrightness = 0;
   stripFlashTotal = 0;
@@ -403,19 +398,16 @@ void timers()
     timer.pixelCnt = timer.tick;
     if (pixelSpeedIndex == 0 && stripFlashTotal == 0) {
       adjustPixelsCntByStep(&pixelsCntCurrent);
-      pixelDifferentBrightnesses = round(pixelsCntCurrent / 4);
+      pixelDifferentBrightnesses = round(pixelsCntCurrent / random(pixelsMaxBrightnessMinMax[0], pixelsMaxBrightnessMinMax[1] + 1));
     }
   }
 
   if (timer.tick - timer.pixelFlash >= timerPixelFlash) {
     timer.pixelFlash = timer.tick;
-
     if (timer.pixelFlashEnabled && pixelCurrentMode > 0) {
       stripFlashTotal = stripPixelsFlash[random(0, stripPixelsFlashLength)];
       stripFlash = 0;
     }
-
-    digitalWrite(LED_BUILTIN, (digitalRead(LED_BUILTIN) == LOW) ? HIGH : LOW);
   }
 }
 
